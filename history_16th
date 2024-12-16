@@ -1,0 +1,244 @@
+```
+
+
+Provider block  : u tell tf which provider u wnt to target...authetication...
+resource block : u write wt resources u wnt to created
+
+
+my name is raman khanna
+
+very easy tool
+
+purpose : to create resources 
+
+terraform : purpose  : provisioning : creating resources : machine , db , firewall , etc 
+  configuration : recommded 
+
+ansible , chef , saltstack , puppet :  configuration : change the properties of the resource , install packages , add users , run commands
+    provisioning : can create resources but its recommended ..
+    
+    
+    
+    gui : create the resource 
+    admintration : cli 
+    iac code 
+    
+    
+    
+    
+    
+    ------------------------------------------------------------- vm : teraform
+    
+    
+    ============================================
+    
+    https://685421549691.signin.aws.amazon.com/console
+    
+    cisco-user
+    
+    wG7j&Rra
+    
+    
+    ====================================== 
+    
+        
+    region : nVirginia
+    
+    centralMachine : installing terraform
+    
+    raman-Cisco-centralizedtfMachine
+    
+    os : image : ubuntu 
+    
+    inst. type : t2.micro
+    
+    -- create a keypair 
+    
+    -- sec group : reuse mine raman-sg
+    
+    =============================
+    
+    loggd in to central-tf-machine
+    
+      sudo -i 
+    
+    -- installed terraform :
+          
+          https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli#install-terraform
+          
+          
+=========================================================================
+
+t init  : install plugins as per the latest avlle 
+t validate
+t plan : simulation / dry run
+t apply  ------------------- sends an api call to the env whch is mentioned in provider block
+t destroy
+
+
+
+
+
+-- aws configure 
+-- provider block inside that i can mention acces key, s key
+-- we can authenticate using roles
+-- tf tfvars
+-- env variables 
+
+
+AKIAZ7FSO3B5YFZTT5QT
+RvzYdlWwtRDrfFaADcKZkqYinfH1xRMDKUNPGQQp
+
+
+
+availivbilty zone  : 
+
+ public ip , instance_type,  pvt ip
+
+
+
+infra : 1 machine , raman-first-server
+
+
+
+
+desited state : hcl code : "t2.micro"
+terraform state : t2.micro  >> "t2.medium >> t2.micro
+actual/current state : aws env : t2.micro   >>  t2.medium  >> t2.micro
+
+
+t apply : t2.medium >> micro
+    refresh
+    apply ....
+  
+=====================================================
+
+
+root@ip-172-31-91-158:~# cat first.tf 
+# Configure the AWS Provider
+provider "aws" {
+region = "us-east-1"
+access_key = "AKIAZ7FSO3B5YFZTT5QT"
+secret_key = "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"
+}
+
+resource "aws_instance" "ec2" {
+ami="ami-0e2c8caa4b6378d8c"
+instance_type="t2.micro"
+tags= {
+Name= "raman-first-server"
+}
+}
+
+=====================================================
+
+root@ip-172-31-91-158:~# cat first.tf 
+# Configure the AWS Provider
+provider "aws" {
+region = "us-east-1"
+access_key = "AKIAZ7FSO3B5YFZTT5QT"
+secret_key = "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"
+}
+
+resource "aws_instance" "ec2" {
+ami="ami-0e2c8caa4b6378d8c"
+instance_type="t2.micro"
+tags= {
+Name= "raman-first-server"
+}
+}
+
+resource "aws_ec2_instance_state" "ec22" {
+instance_id = aws_instance.ec2.id
+#state="stopped"
+state="running"
+}
+
+
+===============================================
+
+
+provider "aws" {
+region = "us-east-1"
+access_key = "AKIAZ7FSO3B5YFZTT5QT"
+secret_key = "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"
+}
+
+resource "aws_instance" "ec2" {
+ami="ami-0e2c8caa4b6378d8c"
+instance_type="t2.micro"
+vpc_security_group_ids=["sg-0e8552c15babe88bc"]
+tags= {
+Name= "raman-first-server"
+}
+}
+
+
+
+
+resource "aws_ec2_instance_state" "ec22" {
+instance_id = aws_instance.ec2.id
+#state="stopped"
+state="running"
+}
+
+
+note : always add crtical arguements especially in desired state ..
+==================================================
+
+
+
+
+root@ip-172-31-91-158:~# cat git.tf 
+provider "github" {
+ token ="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"
+}
+
+resource "github_repository" "ex" {
+  name        = "example"
+  description = "My awesome codebase"
+
+  visibility = "public"
+
+}
+
+
+
+
+
+vi git.tf 
+  138  t plan
+  139  cat .terraform.lock.hcl 
+  140  t plan
+  141  terraform init -upgrade
+  142  ls
+  143  ls -a
+  144  cd .terraform
+  145  ls
+  146  cd providers/
+  147  ls
+  148  cd registry.terraform.io/
+  149  ls
+  150  cd hashicorp/
+  151  ls
+  152  cd github/
+  153  ls
+  154  cd 6.4.0/
+  155  ls
+  156  cd linux_amd64/
+  157  ls
+  158  cd !
+  159  cd ~
+  160  t providers
+  161  t plan
+  162  t apply
+  163  ls
+  164  cat terraform.tfstate
+  165  t state list
+  166  cat first.tf 
+  167  t state list
+  168  t destroy -target github_repository.ex
+  169  t state list
+
+=================================================================
+```
