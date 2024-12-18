@@ -1,0 +1,409 @@
+```
+
+==================================================================
+
+
+count , list type variable , map type bariable 
+remote backends , state locking 
+provisioner : not recommended 
+workspaces 
+
+====================================
+
+
+count :
+    
+    root@ip-172-31-91-158:~/lab1# cat first.tf 
+provider "aws" {
+  region = "us-east-1"
+  access_key = "AKIAZ7FSO3B5TMG3SE5U"
+  secret_key = "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"
+}
+
+resource "aws_vpc" "manual_vpc" {
+  cidr_block = "10.0.0.0/16"
+  enable_dns_support = true
+  enable_dns_hostnames = true
+
+  tags = {
+    Name = "manual-vpc-raman"
+  }
+}
+
+
+resource "aws_subnet" "private_subnet" {
+  vpc_id = aws_vpc.manual_vpc.id
+  cidr_block = "10.0.0.0/24"
+  availability_zone = "ap-south-1a"
+
+  map_public_ip_on_launch = false
+
+  tags = {
+    Name = "private-subnet-raman"
+  }
+}
+
+
+resource "aws_instance" "private_instance" {
+  count = 2
+  ami = "ami-0187337106779cdf8"
+  instance_type = "t2.micro"
+  subnet_id = aws_subnet.private_subnet.id
+
+  tags = {
+    Name = "private-instance-${count.index + 1}"
+  }
+}
+
+=========================================================
+
+
+root@ip-172-31-91-158:~/lab1# cat first.tf 
+provider "aws" {
+  region = "us-east-1"
+  access_key = "AKIAZ7FSO3B5TMG3SE5U"
+  secret_key = "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"
+}
+
+resource "aws_vpc" "manual_vpc" {
+  cidr_block = "10.0.0.0/16"
+  enable_dns_support = true
+  enable_dns_hostnames = true
+
+  tags = {
+    Name = "manual-vpc-raman"
+  }
+}
+
+
+resource "aws_subnet" "private_subnet" {
+  vpc_id = aws_vpc.manual_vpc.id
+  cidr_block = "10.0.0.0/24"
+  availability_zone = "ap-south-1a"
+
+  map_public_ip_on_launch = false
+
+  tags = {
+    Name = "private-subnet-raman"
+  }
+}
+
+
+resource "aws_instance" "private_instance" {
+  count = 3
+  ami = "ami-0187337106779cdf8"
+  instance_type = var.type[count.index]
+  subnet_id = aws_subnet.private_subnet.id
+
+  tags = {
+  # Name = "private-instance-${count.index + 1}"
+    Name =  "private-${var.names[count.index]}"
+  }
+}
+
+
+variable "type" {
+ type=list
+ default= ["t2.micro","t2.medium","t2.large"]
+} 
+
+variable "names" {
+  type = list
+  default = ["dev-server", "stage-server","prod-server"]
+}
+
+
+======================================================
+
+
+-- Interpolation, conditionals, and loops to create S3 buckets and EC2 instances dynamically : 
+
+# Variables for dynamic configuration
+variable "environment" {
+  description = "Environment for the resources (e.g., dev, test, prod)"
+  type        = string
+  default     = "dev"
+}
+
+variable "project_name" {
+  description = "Project associated with the resources"
+  type        = string
+  default     = "my-project"
+}
+
+variable "s3_bucket_names" {
+  description = "List of S3 buckets to create for the environment"
+  type        = map(string)
+  default     = {
+    dev  = "dev-bucket"
+    test = "test-bucket"
+    prod = "prod-bucket"
+  }
+}
+
+variable "instance_configurations" {
+  description = "Configurations for instances based on environment"
+  type = map(map(string))
+  default = {
+    dev  = { ami = "ami-0c1a7f89451184c8b", instance_type = "t2.micro" }
+    test = { ami = "ami-0c1a7f89451184c8b", instance_type = "t2.small" }
+    prod = { ami = "ami-0c1a7f89451184c8b", instance_type = "t2.large" }
+  }
+}
+
+provider "aws" {
+  region = "us-east-1"
+}
+
+# S3 Buckets Loop
+resource "aws_s3_bucket" "buckets" {
+  for_each = var.s3_bucket_names
+
+  bucket = "${each.value}-${var.environment}-${var.project_name}"
+  acl    = var.environment == "prod" ? "private" : "public-read"
+
+  tags = {
+    Environment = var.environment
+    Name        = each.value
+    Project     = var.project_name
+  }
+}
+
+# EC2 Instances Loop
+resource "aws_instance" "instances" {
+  #for_each      = toset(["app1", "app2", "app3"]) # Instance names
+  ami           = var.instance_configurations[var.environment]["ami"]
+  instance_type = var.instance_configurations[var.environment]["instance_type"]
+
+  tags = {
+    Name        = "${var.environment}-${each.key}-${var.project_name}"
+    Environment = var.environment
+    Project     = var.project_name
+  }
+}
+
+# Outputs for verification
+output "s3_bucket_names" {
+  value = [for i in aws_s3_bucket.buckets : i.bucket]
+}
+
+output "ec2_instance_ids" {
+  value = [for j in aws_instance.instances : j.id]
+}
+
+
+
+
+
+
+
+
+ Interpolation
+Purpose: Dynamically inject values into strings or resource parameters.
+Example: bucket = "${each.value}-${var.environment}-${var.project_name}" dynamically creates S3 bucket names.
+ Conditionals
+Purpose: Apply logic to choose different values based on a condition.
+Example: acl = var.environment == "prod" ? "private" : "public-read" sets the S3 bucket ACL to "private" for prod, else "public-read".
+
+=================================================================
+
+terraform : provsioning : creating the resources 
+
+provsioner : remote exec , local exec provisioner  : configuration
+
+
+
+--- i created a keypair , publuc&pvt key on the cloud 
+
+
+
+root@ip-172-31-91-158:~/lab1# cat remote.tf 
+provider "aws" {
+region= "us-east-1"
+access_key = "AKIAZ7FSO3B5TMG3SE5U"
+secret_key = "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"
+}
+
+resource "aws_instance" "myec2" {
+   ami = "ami-0166fe664262f664c"                               #amazon linux ami
+   instance_type = "t2.micro"
+   key_name = "remote-key"                                 # Create a keypair in the region #
+   vpc_security_group_ids  = [aws_security_group.allow_ssh.id]
+   tags= {
+   Name= "raman-web-server"
+   }
+
+   provisioner "remote-exec" {
+     inline = [
+       "sudo amazon-linux-extras install -y nginx1.12",
+       "sudo systemctl start nginx"
+     ]
+
+   connection {
+     type = "ssh"
+     user = "ec2-user"
+     private_key = file("./raman.pem")    #copy the content of the private keyfile ; create a file in /root/app1 named nvirginia.pem and then paste the content into this file #
+     host = self.public_ip
+#    host= aws_instance.myec2.public_ip
+   }
+   }
+}
+
+### NOTE - Adding a new security group resource to allow the terraform provisioner from laptop to connect to EC2 Instance via SSH.
+
+resource "aws_security_group" "allow_ssh" {
+  name        = "allow_ssh"
+  description = "Allow SSH inbound traffic"
+  vpc_id      = "vpc-01948378f1e13345b"
+
+  ingress {
+    description = "SSH into VPC"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  
+ ingress {
+    description = "SSH into VPC"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  egress {
+    description = "Outbound Allowed"
+    from_port   = 0
+    to_port     = 65535
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+
+
+
+
+==========================
+
+
+LAB : LOCAL EXEC PROVISIONER :
+
+provider "aws" {
+region= "us-east-2"
+}
+
+resource "aws_instance" "myec2" {
+   ami = "ami-064ff912f78e3e561"
+   instance_type = "t2.micro"
+
+   provisioner "local-exec" {
+    command = "echo ${aws_instance.myec2.private_ip} >> private_ips.txt"
+}
+}
+
+
+
+======================================
+
+
+
+cicd : jenkins >> workflow 
+
+github : polling of ur github repo
+
+t init
+t apply
+
+ansible-playbook web.yaml -i inv 
+
+
+
+========================================================
+
+
+provider "aws" {
+  region     = "us-east-1"
+  access_key = "AKIAZ7FSO3B5TMG3SE5U"
+secret_key = "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"
+
+}
+
+resource "aws_instance" "myec2" {
+   ami = "ami-0187337106779cdf8"
+   instance_type = lookup(var.instance_type,terraform.workspace)
+tags = {
+    Name = lookup(var.name,terraform.workspace)
+  }
+}
+
+variable "instance_type" {
+  type = map
+
+  default = {
+    default = "t2.nano"
+    dev     = "t2.micro"
+    prod     = "t2.large"
+  }
+}
+
+variable "name"{
+type=map
+default= {
+default="IT server"
+dev="dev-server"
+prod="prod-server"
+}
+}
+
+
+
+--- after creating the code , do terraform workspace show
+
+--- in default wrkspace , do terraform plan 
+
+-- create a workspace prod and dev as well
+
+terraform workspace new dev
+
+terraform workspace new prod
+
+----  switch to dev
+
+terraform workspace select dev
+
+--- terraform plan
+
+-- and same for prod and see the diff in instance types..
+
+
+=======================================================================
+
+
+
+availibility : 99.9999999999 %
+versioning :
+security : keep our state file on s3 as encrypted 
+
+
+
+--- create an s3 bucket :
+    -- enabled the versioning 
+    
+
+--- go to ur server >> actions >> securoty >> modify iam role >> admin-role..
+
+
+root@ip-172-31-91-158:~/lab1# cat backend.tf 
+terraform {
+  backend "s3" {
+    bucket = "cisco-statefile"
+    key    = "terraform/state"
+    region = "us-east-1"
+  }
+}
+
+
+=========================================================
+
+```
