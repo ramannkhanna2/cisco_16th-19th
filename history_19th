@@ -1,0 +1,669 @@
+```
+=================================================
+
+-- state locking on our remote backend :
+   
+   name: tflock
+   partition key : LockID
+   
+    
+-- create the table 
+
+
+
+
+root@ip-172-31-91-158:~/lab1# cat backend.tf 
+terraform {
+  backend "s3" {
+    bucket = "raman-cisco-statefile"
+    key    = "terraform/state"
+    region = "us-east-1"
+    dynamodb_table = "tflock"
+  }
+}
+
+
+
+
+t apply to test .....the lock id getting generated at dynamodb table end
+
+========================================================
+
+updateinplace
+disruptive changes
+
+
+Resource Meta-Argument lifecycle :
+    
+    
+    
+The lifecycle meta-argument allows you to define behaviors that control the creation, updating, and deletion of resources.
+
+Example 3.1: create_before_destroy - Default Behavior
+Use Case: Ensuring zero downtime while replacing an EC2 instance.
+
+resource "aws_instance" "example" {
+  ami           = "ami-123456"
+  instance_type = "t2.micro"
+
+  lifecycle {
+    create_before_destroy = true
+  }
+
+  tags = {
+    Name = "example-instance"
+  }
+}
+
+
+
+
+
+
+Example 3.2: prevent_destroy - Implementation and Testing
+Use Case: Preventing accidental deletion of an S3 bucket.
+
+resource "aws_s3_bucket" "critical" {
+  bucket = "critical-bucket"
+
+  lifecycle {
+    prevent_destroy = true
+  }
+
+  tags = {
+    Purpose = "Critical data storage"
+  }
+}
+
+
+
+Example 3.3: ignore_changes - Implementation and Testing
+Use Case: Ignore changes to specific tags during future updates.
+
+resource "aws_s3_bucket" "example" {
+  bucket = "mutable-bucket"
+
+  tags = {
+    Environment = "Dev"
+    Owner       = "DevOps"
+  }
+
+  lifecycle {
+    ignore_changes = [
+      tags["Owner"]
+    ]
+  }
+}
+
+
+#Helps avoid unintended resource updates.
+
+
+==================================================================================
+
+
+
+LAB : Modules :
+
+---- create a directory modules and projects .
+
+--- create compute directory in modules and project-A under projects directory.
+
+--- under compute directory create the source module ec2.tf for global use .
+
+resource "aws_instance" "s1" {
+instance_type= "t2.micro"
+ami= "ami-064ff912f78e3e561"
+}
+
+
+--- go to projects >> project-A directory and create the child module myec2.tf
+
+-- call the source module from myec2.tf 
+
+module "ec2module" {
+source ="../../modules/ec2"
+}
+
+
+--- Being under projects-A ,do terraform plan 
+
+--- terraform init
+
+--- terraform apply
+
+(if its giving an error , provide a provider block in project-A folder as well)
+
+--------------------------------------------------------------------------------
+
+LAB : Using variables to solve the problem    
+
+
+---- under /root/modules/ec2  , modify the ec2.tf file (source module) to use variables
+
+resource "aws_instance" "s1" {
+instance_type= var.instancetype
+ami= "ami-064ff912f78e3e561"
+}
+
+----- variables.tf file
+
+variable "instancetype" {
+default = "t2.micro"
+}
+
+
+---- under /root/projects/project-A , create two env files which will use differenct instance types :
+
+--- myec2.tf for dev env :
+
+module "ec2module-dev" {
+source ="../../modules/ec2"
+instancetype="t2.nano"
+}
+
+
+---- myec2.tf-prod for prod env :
+
+module "ec2module-prod" {
+source ="../../modules/ec2"
+}
+
+
+---- terraform init and  apply  .
+
+
+=================================================
+
+
+-- USING OUTPUT BLOCK IN MODULES TO TRANSFER THE VALUES FROM CHILD TO ROOT MODULES :
+
+root@ip-172-31-80-106:~/app/projectB# cat /root/app/modules/compute/ec2.tf 
+resource "aws_instance" "myec2" {
+   ami = "ami-0e2c8caa4b6378d8c"
+   instance_type = var.type
+tags = {
+    Name = var.nam
+  }
+}
+
+output "type" {
+  value = var.type
+  description = "The instance type passed to the module"
+}
+
+
+
+
+root@ip-172-31-80-106:~/app/projectB# cat /root/app/modules/compute/variable.tf 
+variable "type" {
+}
+
+variable "nam" {
+}
+
+
+
+root@ip-172-31-80-106:~/app/projectB# cat myec2.tf 
+provider "aws" {
+region="us-east-1"
+}
+
+module "ec2module" {
+source ="/root/app/modules/compute"
+type= var.type
+nam="projectB-server"
+}
+
+variable "type" {
+  description = "The instance type for the EC2 instance"
+  type        = string
+  default="t2.micro"
+}
+
+
+# Accessing the child's type variable output
+output "ec2module_type" {
+  value = module.ec2module.type
+}
+
+
+============================================================
+
+Step 1: Sign in to AWS
+Log in to your AWS Management Console.
+Navigate to the S3 service by searching for "S3" in the search bar.Step 2: Create an S3 Bucket
+Click "Create bucket".
+Bucket name:
+Enter a globally unique bucket name (e.g., my-static-site-bucket).
+AWS will not accept duplicate names across regions.
+Region:
+Choose a region close to your target audience (e.g., us-east-1 for North America).
+Disable Block Public Access:
+Uncheck "Block all public access".
+Confirm the warning dialog when prompted.
+Click Create bucket.Step 3: Upload Static Website Files
+Click on the bucket name from the S3 dashboard.
+Inside the bucket, click "Upload".
+Drag and drop or choose your static website files (e.g., index.html, styles.css).
+Set permissions:
+Ensure that files are publicly accessible (you will manage permissions later for all files collectively).
+Click "Upload".Step 4: Enable Static Website Hosting
+Inside your S3 bucket, go to the "Properties" tab.
+Scroll down to "Static website hosting" and click "Edit".
+Enable Static website hosting.
+Hosting type: Choose "Host a static website".
+Index document: Enter the file name of your landing page (e.g., index.html).
+Error document (optional): Enter the name of an error page (e.g., error.html).
+Click "Save changes".Step 5: Set Bucket Policy for Public Access
+Go to the Permissions tab of your S3 bucket.
+Under Bucket Policy, click Edit.
+Enter the following bucket policy to allow public read access:
+json
+Copy code
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "PublicReadGetObject",
+            "Effect": "Allow",
+            "Principal": "*",
+            "Action": "s3:GetObject",
+            "Resource": "arn:aws:s3:::your-bucket-name/*"
+        }
+    ]}
+Replace your-bucket-name with your actual bucket name.
+Click "Save changes".Step 6: Test the Website
+Go back to the Properties tab.
+Under Static website hosting, find the Bucket website endpoint (e.g., http://my-static-site-bucket.s3-website-us-east-1.amazonaws.com).
+Copy the URL and open it in a browser to view your static site.
+
+
+
+======================================
+
+
+--- Terraform manifests to build a static website :
+
+
+root@ip-172-31-91-158:~/test# ls
+error.html  index.html  modules  static.tf  terraform.tfstate  terraform.tfstate.backup
+
+-------------------
+
+1. index.html (Index Document)
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Welcome to My Static Website</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin-top: 50px;
+        }
+        h1 {
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>Welcome to My Static Website!</h1>
+    <p>This is a simple static website hosted on Amazon S3. Enjoy exploring!</p>
+</body>
+</html>
+
+
+
+2. error.html (Error Document)
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>404 - Page Not Found</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin-top: 50px;
+        }
+        h1 {
+            color: #f44336;
+        }
+        p {
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <h1>404 - Page Not Found</h1>
+    <p>Sorry, the page you're looking for doesn't exist.</p>
+    <p>Please check the URL or <a href="/">go back to the homepage</a>.</p>
+</body>
+</html>
+
+
+---------------------------------------
+
+
+1. Directory Structure
+Let's begin by structuring the Terraform files into a module-based format.
+
+
+.
+├── main.tf
+├── modules
+│   └── s3_website
+│       ├── main.tf
+│       └── outputs.tf
+│       └── variables.tf
+├── variables.tf
+├── terraform.tfstate
+└── terraform.tfstate.backup
+
+
+modules/s3_website: This will contain the code for creating the S3 website and associated configurations.
+
+main.tf: This is your root Terraform configuration where you'll call the module.
+
+variables.tf: Defines the input variables for the root module.
+
+outputs.tf: Defines outputs that are aggregated from the module and root module.
+
+
+
+2. Module (modules/s3_website)
+a. modules/s3_website/main.tf
+This is where we place the exact configuration from the existing code, but refactor it into a module that will receive variables.
+
+
+# AWS Provider setup (this should be part of the root)
+resource "aws_s3_bucket" "terraformbucket" {
+  bucket = var.bucket_name
+}
+
+resource "aws_s3_bucket_ownership_controls" "ownership" {
+  bucket = aws_s3_bucket.terraformbucket.id
+  rule {
+    object_ownership = "BucketOwnerPreferred"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "publiceaccess" {
+  bucket = aws_s3_bucket.terraformbucket.id
+  block_public_acls       = var.block_public_acls
+  block_public_policy     = var.block_public_policy
+  ignore_public_acls      = var.ignore_public_acls
+  restrict_public_buckets = var.restrict_public_buckets
+}
+
+resource "aws_s3_bucket_acl" "bucket_acl" {
+  depends_on = [
+    aws_s3_bucket_ownership_controls.ownership,
+    aws_s3_bucket_public_access_block.publiceaccess,
+  ]
+
+  bucket = aws_s3_bucket.terraformbucket.id
+  acl    = "public-read"
+}
+
+resource "aws_s3_object" "index" {
+  bucket       = aws_s3_bucket.terraformbucket.id
+  key          = "index.html"
+  source       = var.index_html
+  content_type = "text/html"
+}
+
+resource "aws_s3_object" "error" {
+  bucket       = aws_s3_bucket.terraformbucket.id
+  key          = "error.html"
+  source       = var.error_html
+  content_type = "text/html"
+}
+
+resource "aws_s3_bucket_website_configuration" "example" {
+  bucket = aws_s3_bucket.terraformbucket.id
+
+  index_document {
+    suffix = "index.html"
+  }
+
+  error_document {
+    key = "error.html"
+  }
+}
+
+resource "aws_s3_bucket_policy" "public_read_access" {
+  depends_on = [
+    aws_s3_bucket_ownership_controls.ownership,
+    aws_s3_bucket_public_access_block.publiceaccess,
+  ]
+  bucket = aws_s3_bucket.terraformbucket.id
+  policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": [ "s3:GetObject" ],
+      "Resource": [
+        "${aws_s3_bucket.terraformbucket.arn}",
+        "${aws_s3_bucket.terraformbucket.arn}/*"
+      ]
+    }
+  ]
+}
+EOF
+}
+
+
+
+
+
+b. modules/s3_website/variables.tf
+We define all variables used in the module here so the module can accept inputs.
+
+
+variable "bucket_name" {
+  description = "The name of the S3 bucket"
+  type        = string
+}
+
+variable "index_html" {
+  description = "Path to the index.html file to upload"
+  type        = string
+  default     = "index.html"
+}
+
+variable "error_html" {
+  description = "Path to the error.html file to upload"
+  type        = string
+  default     = "error.html"
+}
+
+variable "block_public_acls" {
+  description = "Whether to block public ACLs on the bucket"
+  type        = bool
+  default     = false
+}
+
+variable "block_public_policy" {
+  description = "Whether to block public policy on the bucket"
+  type        = bool
+  default     = false
+}
+
+variable "ignore_public_acls" {
+  description = "Whether to ignore public ACLs on the bucket"
+  type        = bool
+  default     = false
+}
+
+variable "restrict_public_buckets" {
+  description = "Whether to restrict public buckets"
+  type        = bool
+  default     = false
+}
+
+
+
+c. modules/s3_website/outputs.tf
+This is where we define the output values for the module.
+
+
+output "website_endpoint" {
+  description = "The endpoint URL for the static website"
+  value       = aws_s3_bucket.terraformbucket.website_endpoint
+}
+
+
+
+
+3. Root (main.tf)
+In the root directory, we will call the s3_website module. This is where you configure the input variables for the module and also use the module output.
+
+
+module "s3_website" {
+  source        = "./modules/s3_website"
+  bucket_name   = "myteststaticcccccccccccccccc4"
+  index_html    = "index.html"
+  error_html    = "error.html"
+  block_public_acls       = false
+  block_public_policy     = false
+  ignore_public_acls      = false
+  restrict_public_buckets = false
+}
+
+output "website_endpoint" {
+  value = module.s3_website.website_endpoint
+}
+
+
+
+
+4. Initialize and Apply Terraform Configuration
+Now you can initialize Terraform in your working directory and apply the configuration.
+
+Initialize Terraform:
+Run the terraform init command to initialize the project.
+
+
+terraform init
+
+
+Plan:
+Run terraform plan to review the changes that will be made.
+
+
+terraform plan
+
+Apply:
+Run terraform apply to apply the configuration and create the resources.
+
+
+terraform apply
+
+
+6. Outputs
+Once the configuration is applied, you can view the S3 static website endpoint with:
+
+
+terraform output website_endpoint
+
+
+------------
+
+
+Repeat the initialization, planning, and application steps to verify the behavior.
+
+
+
+=======================================================================
+
+
+
+
+-------- Terraform import :
+
+create a resource  first...
+
+create import.tf file :
+
+[root@tf-main terraform]# cat import.tf
+import {
+id="i-0430f7e44b388e61a"
+to=aws_instance.ec23
+
+}
+
+  637  terraform plan -generate-config-out=res.tf
+  638  t import aws_instance.web i-0c5b66a8f9d3b0053
+t plan
+  658  terraform apply
+  659  terraform state list
+
+
+
+
+
+--------------------------------------------------------------
+
+
+root@ip-172-31-91-158:~/test# cat import.tf 
+import {
+  to = aws_instance.web
+  id = "i-0c5b66a8f9d3b0053"
+}
+
+import {
+  to = aws_s3_bucket.bucket
+  id = "pradeep-tf-test-bucket"
+
+}
+
+
+
+  641  terraform plan -target=aws_s3_bucket.bucket -generate-config-out=s3.tf
+  643  terraform import aws_s3_bucket.bucket pradeep-tf-test-bucket
+  644  t state list
+ t state rm aws_instance.web
+  652  t state rm aws_s3_bucket.bucket
+or t state rm '*'
+
+
+****************************************************************
+
+
+
+****************************************************************
+
+
+LAB : DEBUGGING :
+
+---- to start seeing terraform logs use
+
+export TF_LOG=TRACE       
+         WARNING
+         ERROR
+         VERSBOSE
+
+--- to export it to a file
+
+export TF_LOG_PATH=/tmp/crash.log
+
+--- to remove logging 
+
+unset TF_LOG=TRACE   / unset TF_LOG
+
+unset TF_LOG_PATH
+
+
+**************************************************************************************
+
+```
