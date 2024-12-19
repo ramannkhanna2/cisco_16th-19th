@@ -2,6 +2,13 @@
 
 Raman Khanna
 
+feedback forms :-
+
+https://survey.zohopublic.com/zs/bSC0IP
+
+https://forms.office.com/r/AccQt3feRf
+
+
 ```
 hashicorp associate preparation :
 
